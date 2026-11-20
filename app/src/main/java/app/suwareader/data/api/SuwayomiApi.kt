@@ -172,6 +172,22 @@ class SuwayomiApi(private val gql: GraphQLClient) {
         )
     }
 
+    suspend fun globalMetas(prefix: String): Map<String, String> {
+        val data = gql.execute("query { metas { nodes { key value } } }")
+        return data.obj("metas").arr("nodes")
+            .map { it.jsonObject }
+            .filter { it.str("key").orEmpty().startsWith(prefix) }
+            .associate { it.str("key").orEmpty() to it.str("value").orEmpty() }
+    }
+
+    suspend fun setGlobalMetas(values: Map<String, String>) {
+        if (values.isEmpty()) return
+        val body = values.entries.mapIndexed { i, (k, v) ->
+            "m$i: setGlobalMeta(input: {meta: {key: ${JsonPrimitive(k)}, value: ${JsonPrimitive(v)}}}) { meta { key } }"
+        }.joinToString("\n")
+        gql.execute("mutation {\n$body\n}")
+    }
+
     /** Starts the server's library update (fetches new chapters from every source). */
     suspend fun startLibraryUpdate() {
         gql.execute("mutation { updateLibrary(input: {}) { updateStatus { jobsInfo { isRunning } } } }")

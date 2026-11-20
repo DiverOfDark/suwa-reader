@@ -28,6 +28,7 @@ class SuwaApp : Application(), SingletonImageLoader.Factory {
         Notifications.createChannels(this)
         container.appScope.launch(Dispatchers.IO) { cleanReaderCache() }
         container.progressSync.flushSoon()
+        container.readerSettingsSync.start()
     }
 
     override fun newImageLoader(context: Context): ImageLoader = ImageLoader.Builder(this)

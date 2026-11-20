@@ -8,6 +8,7 @@ import app.suwareader.data.download.Downloads
 import app.suwareader.data.prefs.AppPreferences
 import app.suwareader.data.repo.LibraryRepository
 import app.suwareader.data.sync.ProgressSync
+import app.suwareader.data.sync.ReaderSettingsSync
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +58,10 @@ class AppContainer(context: Context) {
         remap = { repository.remapPending(it) },
         onSynced = { repository.onProgressSynced(it) },
     ).also { repository.progressSync = it }
+
+    val readerSettingsSync = ReaderSettingsSync(context, api, readerPreferences, appScope).also {
+        repository.readerSettingsSync = it
+    }
 
     val readerCacheDir = File(context.cacheDir, "reader")
 

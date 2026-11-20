@@ -39,6 +39,7 @@ class LibraryRepository(
     private val scope: CoroutineScope,
 ) {
     lateinit var progressSync: ProgressSync
+    var readerSettingsSync: app.suwareader.data.sync.ReaderSettingsSync? = null
 
     private val _library = MutableStateFlow(store.read(LIBRARY_FILE, Library.serializer()))
     val library: StateFlow<Library?> = _library.asStateFlow()
@@ -81,6 +82,7 @@ class LibraryRepository(
             // Send local progress first so the fresh copy already includes it
             progressSync.flush()
             online { api.library() }.onSuccess { lib ->
+                readerSettingsSync?.sync()
                 val adjusted = lib.withPendingUnread()
                 store.write(LIBRARY_FILE, Library.serializer(), adjusted)
                 _library.value = adjusted
