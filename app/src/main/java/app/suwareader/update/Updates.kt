@@ -57,6 +57,7 @@ class Updates(
 
     val running = RunningVersion(BuildConfig.VERSION_CODE.toLong(), BuildConfig.VERSION_NAME)
 
+
     /** Local builds (versionCode 1) never offer updates over themselves unless asked. */
     val isDevBuild get() = BuildConfig.DEBUG
 
@@ -66,8 +67,27 @@ class Updates(
     private val _install = MutableStateFlow<InstallState>(InstallState.Idle)
     val install: StateFlow<InstallState> = _install.asStateFlow()
 
-    var pendingVersionName: String? = null
-        private set
+    // What's being installed, on disk: the install result can arrive in a new process (e.g. after the background
+    // worker that started it has finished), which must still know to retry, report or clean up.
+    private val pending = context.getSharedPreferences("update_install", Context.MODE_PRIVATE)
+    var pendingVersionName: String?
+        get() = pending.getString("version", null)
+        private set(v) = pending.edit().putString("version", v).apply()
+    private var pendingFile: File?
+        get() = pending.getString("file", null)?.let(::File)
+        set(v) = pending.edit().putString("file", v?.absolutePath).apply()
+    private var autoRetried: Boolean
+        get() = pending.getBoolean("retried", false)
+        set(v) = pending.edit().putBoolean("retried", v).apply()
+
+    private fun clearPending() = pending.edit().clear().apply()
+
+    init {
+        // An install that finished (we're running it now) or is older than us is nothing to wait for any more
+        val file = pending.getString("file", null)
+        val code = file?.substringAfterLast("suwa-")?.substringBefore(".apk")?.toLongOrNull()
+        if (code != null && code <= running.versionCode) pending.edit().clear().apply()
+    }
 
     suspend fun checkQuietly() {
         if (isDevBuild) return
@@ -96,33 +116,46 @@ class Updates(
         result
     }
 
-    fun startInstall(available: UpdateState.Available) {
-        if (installJob?.isActive == true) return
-        installJob = scope.launch { downloadAndInstall(available) }
+    /** The only way an install starts, so the Install button and the background updater never race. */
+    @Synchronized
+    fun startInstall(available: UpdateState.Available): Job {
+        installJob?.takeIf { it.isActive }?.let { return it }
+        return scope.launch { downloadAndInstall(available) }.also { installJob = it }
     }
 
-    suspend fun downloadAndInstall(available: UpdateState.Available) {
+    private suspend fun downloadAndInstall(available: UpdateState.Available) {
         if (!installer.canInstall()) {
             _install.value = InstallState.PermissionRequired
             return
         }
+        if (pendingVersionName != available.versionName) autoRetried = false
         pendingVersionName = available.versionName
-        _install.value = InstallState.Downloading(0, available.sizeBytes)
-        val file = try {
-            download(available)
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR) { "Downloading ${available.versionName} failed: ${e.asLog()}" }
-            _install.value = InstallState.Failed(describe(e))
-            return
+        // A copy kept from an earlier attempt is reused if it still verifies, so a retry doesn't download again
+        val cached = apkFile(available).takeIf { it.length() == available.sizeBytes && verifier.verify(it, available.sha256) == ApkVerdict.Ok }
+        val file = cached ?: run {
+            _install.value = InstallState.Downloading(0, available.sizeBytes)
+            val downloaded = try {
+                download(available)
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) { "Downloading ${available.versionName} failed: ${e.asLog()}" }
+                _install.value = InstallState.Failed(describe(e))
+                return
+            }
+            _install.value = InstallState.Verifying
+            val verdict = verifier.verify(downloaded, available.sha256)
+            if (verdict != ApkVerdict.Ok) {
+                logcat(LogPriority.ERROR) { "Refusing to install ${available.versionName}: $verdict" }
+                downloaded.delete()
+                _install.value = InstallState.Refused(verdict.refusalMessage() ?: "Refused to install.")
+                return
+            }
+            downloaded
         }
-        _install.value = InstallState.Verifying
-        val verdict = verifier.verify(file, available.sha256)
-        if (verdict != ApkVerdict.Ok) {
-            logcat(LogPriority.ERROR) { "Refusing to install ${available.versionName}: $verdict" }
-            file.delete()
-            _install.value = InstallState.Refused(verdict.refusalMessage() ?: "Refused to install.")
-            return
-        }
+        pendingFile = file
+        commit(file)
+    }
+
+    private suspend fun commit(file: File) {
         try {
             _install.value = InstallState.AwaitingConfirmation
             installer.install(file)
@@ -131,12 +164,15 @@ class Updates(
         }
     }
 
+    private fun apkFile(available: UpdateState.Available) =
+        File(File(context.cacheDir, "updates"), "suwa-${available.versionCode}.apk")
+
     private suspend fun download(available: UpdateState.Available): File = withContext(Dispatchers.IO) {
         require(available.url.startsWith(UpdateCheck.ALLOWED_PREFIX)) { "Unexpected download location" }
         // Inside the app sandbox for its whole life, so it can't be swapped between the check and the install
         val dir = File(context.cacheDir, "updates").apply { mkdirs() }
+        val target = apkFile(available)
         dir.listFiles()?.forEach { it.delete() }
-        val target = File(dir, "suwa-${available.versionCode}.apk")
         client.newCall(Request.Builder().url(available.url).build()).execute().use { r ->
             if (!r.isSuccessful) throw IOException("GitHub answered HTTP ${r.code} for the APK")
             if (!r.request.url.isHttps) throw IOException("The download was redirected off HTTPS")
@@ -162,7 +198,20 @@ class Updates(
 
     fun onInstallOutcome(state: InstallState) {
         // A result for an install started by an earlier process (e.g. the one this update replaced) isn't ours
+        android.util.Log.i("SuwaUpdate", "Outcome $state for $pendingVersionName (retried=$autoRetried, file=${pendingFile?.exists()})")
         if (pendingVersionName == null) return
+        val file = pendingFile
+        if (state == InstallState.Declined && !autoRetried && file != null && file.exists()) {
+            // Some phones (seen on Xiaomi) abort the first session while their security check runs, even when the
+            // user approves it; the same APK then installs fine. Try once more on our own instead of making the
+            // user tap Install again. A genuine "cancel" just gets asked one more time.
+            autoRetried = true
+            android.util.Log.i("SuwaUpdate", "Install of $pendingVersionName was aborted; retrying once")
+            scope.launch { commit(file) }
+            return
+        }
+        if (state != InstallState.AwaitingConfirmation) Notifications.cancel(context, Notifications.ID_UPDATE)
+        if (state == InstallState.Installed || state is InstallState.Failed) clearPending()
         _install.value = state
     }
 
@@ -180,7 +229,7 @@ class Updates(
         val state = check()
         if (state !is UpdateState.Available) return
         if (prefs.autoInstallUpdates.get() && installer.canInstall()) {
-            downloadAndInstall(state)
+            startInstall(state).join()
             if (_install.value is InstallState.Failed || _install.value is InstallState.Refused) notifyAvailable(state)
         } else {
             notifyAvailable(state)

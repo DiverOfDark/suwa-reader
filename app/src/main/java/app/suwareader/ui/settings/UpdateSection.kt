@@ -60,7 +60,7 @@ fun UpdateSection() {
             InstallState.Verifying -> Text("Checking the download's checksum and signing key…", style = MaterialTheme.typography.bodySmall)
             InstallState.AwaitingConfirmation -> Text("Waiting for Android to install it…", style = MaterialTheme.typography.bodySmall)
             InstallState.Installed -> Text("Installed. Restart Suwa to use it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-            InstallState.Declined -> Text("Install cancelled.", style = MaterialTheme.typography.bodySmall)
+            InstallState.Declined -> Text("Install cancelled. Tap Install to try again; the download is kept.", style = MaterialTheme.typography.bodySmall)
             is InstallState.Refused -> Text(i.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             is InstallState.Failed -> Text(i.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             InstallState.PermissionRequired -> Text(

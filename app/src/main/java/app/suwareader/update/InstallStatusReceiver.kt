@@ -19,6 +19,7 @@ class InstallStatusReceiver : BroadcastReceiver() {
         val updates = (context.applicationContext as SuwaApp).container.updates
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, Int.MIN_VALUE)
         val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+        android.util.Log.i("SuwaUpdate", "Install status $status ($message)")
         when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 val confirm = if (Build.VERSION.SDK_INT >= 33) {
@@ -33,9 +34,10 @@ class InstallStatusReceiver : BroadcastReceiver() {
                 confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 updates.onInstallOutcome(InstallState.AwaitingConfirmation)
                 val foreground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-                if (foreground) {
-                    context.startActivity(confirm)
-                } else {
+                // Try to open the prompt either way; Android may refuse when we're in the background, so then also
+                // leave it one tap away in a notification
+                runCatching { context.startActivity(confirm) }
+                if (!foreground) {
                     // Android won't let a background app open the confirmation; leave it one tap away instead
                     val pi = PendingIntent.getActivity(context, 7, confirm, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
                     Notifications.notify(
