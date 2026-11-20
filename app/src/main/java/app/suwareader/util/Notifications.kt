@@ -17,6 +17,7 @@ object Notifications {
     const val ID_DOWNLOAD = 100
     const val CHANNEL_UPDATES = "updates"
     const val ID_UPDATE = 101
+    const val ID_UPDATED = 102
 
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

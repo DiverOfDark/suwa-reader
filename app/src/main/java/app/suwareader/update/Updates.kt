@@ -161,8 +161,9 @@ class Updates(
     }
 
     fun onInstallOutcome(state: InstallState) {
+        // A result for an install started by an earlier process (e.g. the one this update replaced) isn't ours
+        if (pendingVersionName == null) return
         _install.value = state
-        if (state == InstallState.Installed) Notifications.cancel(context, Notifications.ID_UPDATE)
     }
 
     fun dismissInstall() {

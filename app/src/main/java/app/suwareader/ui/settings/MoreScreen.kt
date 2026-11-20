@@ -60,7 +60,11 @@ fun MoreScreen(onOpenDownloads: () -> Unit, onOpenSettings: () -> Unit) {
                 ) { scope.launch { c.progressSync.flush() } }
             }
             (update as? app.suwareader.update.UpdateState.Available)?.let {
-                Entry(Icons.Filled.SystemUpdate, "Suwa ${it.versionName} is available", "Tap to see it in Settings", onOpenSettings)
+                Entry(Icons.Filled.SystemUpdate, "Suwa ${it.versionName} is available", "Tap to install") {
+                    c.updates.dismissInstall()
+                    c.updates.startInstall(it)
+                    onOpenSettings()
+                }
             }
             Entry(Icons.Filled.Download, "Downloads", if (queue.isEmpty()) "Queue empty" else "${queue.size} in queue", onOpenDownloads)
             Entry(Icons.Filled.Settings, "Settings", "Server, downloads, appearance", onOpenSettings)

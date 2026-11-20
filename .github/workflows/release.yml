@@ -57,6 +57,9 @@ jobs:
           NOTES: ${{ github.event.head_commit.message }}
         run: |
           mkdir -p dist
+          # Release notes: the commit message without trailers like Co-Authored-By
+          NOTES=$(printf '%s\n' "$NOTES" | grep -vE '^[A-Za-z-]+-[Bb]y: ' || true)
+          printf '%s\n' "$NOTES" > dist-notes.txt
           tag="v$VERSION_NAME"
           echo "TAG=$tag" >> "$GITHUB_ENV"
           apks="{}"
@@ -78,9 +81,8 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
-          NOTES: ${{ github.event.head_commit.message }}
         run: |
-          gh release create "$TAG" dist/* --title "$TAG" --notes "$NOTES" --latest --target "$GITHUB_SHA"
+          gh release create "$TAG" dist/* --title "$TAG" --notes-file dist-notes.txt --latest --target "$GITHUB_SHA"
 
       - uses: actions/upload-artifact@v4
         with:

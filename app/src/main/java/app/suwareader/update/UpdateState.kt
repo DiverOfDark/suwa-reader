@@ -56,6 +56,7 @@ sealed interface InstallState {
  */
 object UpdateCheck {
     private val SHA256 = Regex("^[0-9a-fA-F]{64}$")
+    private val TRAILER = Regex("^[A-Za-z-]+-[Bb]y: .*$")
 
     fun decide(running: RunningVersion, manifest: ReleaseManifest?, abis: List<String>): UpdateState {
         if (manifest == null || manifest.versionCode <= running.versionCode) return UpdateState.UpToDate
@@ -69,7 +70,8 @@ object UpdateCheck {
             else -> null
         }
         if (why != null) return UpdateState.Failed("Release ${manifest.versionName} can't be verified: $why. Not installing it.")
-        return UpdateState.Available(manifest.versionName, manifest.versionCode, manifest.notes, apk.url, apk.sha256, apk.size)
+        val notes = manifest.notes.lines().filterNot { TRAILER.matches(it) }.joinToString("\n").trim()
+        return UpdateState.Available(manifest.versionName, manifest.versionCode, notes, apk.url, apk.sha256, apk.size)
     }
 
     const val REPO = "DiverOfDark/suwa-reader"
