@@ -210,6 +210,8 @@ fun ReaderSettingsSheet(
     settingsViewModel: ReaderSettingsViewModel,
     preferences: ReaderPreferences,
     readingMode: ReadingMode,
+    seriesMode: ReadingMode,
+    onUseDefault: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -262,6 +264,20 @@ fun ReaderSettingsSheet(
                 preferences.defaultReadingMode,
                 ReadingMode.entries.filter { it != ReadingMode.DEFAULT }.map { it.flagValue to it.stringRes.text },
             )
+            if (seriesMode != ReadingMode.DEFAULT) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "This series has its own mode (${seriesMode.stringRes.text}), so the default doesn't apply here.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    androidx.compose.material3.TextButton(onClick = onUseDefault) { Text("Use default") }
+                }
+            }
             ChoicePref(
                 "Background",
                 preferences.readerTheme,

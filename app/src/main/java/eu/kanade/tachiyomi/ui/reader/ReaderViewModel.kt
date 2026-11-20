@@ -115,8 +115,8 @@ class ReaderViewModel(
                     id = m.id,
                     title = m.title,
                     source = m.sourceId?.toLongOrNull(),
-                    readingMode = m.meta[META_MODE]?.toIntOrNull()?.takeUnless { localNewer } ?: mangaPrefs.getInt("mode_${m.id}", 0),
-                    orientation = m.meta[META_ORIENTATION]?.toIntOrNull()?.takeUnless { localNewer } ?: mangaPrefs.getInt("orientation_${m.id}", 0),
+                    readingMode = if (localNewer) mangaPrefs.getInt("mode_${m.id}", 0) else m.meta[META_MODE]?.toIntOrNull() ?: 0,
+                    orientation = if (localNewer) mangaPrefs.getInt("orientation_${m.id}", 0) else m.meta[META_ORIENTATION]?.toIntOrNull() ?: 0,
                 ),
             )
         }

@@ -211,6 +211,8 @@ class ReaderActivity : AppCompatActivity() {
                         settingsViewModel = settingsViewModel,
                         preferences = readerPreferences,
                         readingMode = ReadingMode.fromPreference(viewModel.getMangaReadingMode()),
+                        seriesMode = ReadingMode.fromPreference(viewModel.getMangaReadingMode(resolveDefault = false)),
+                        onUseDefault = { viewModel.setMangaReadingMode(ReadingMode.DEFAULT) },
                         onDismiss = viewModel::closeDialog,
                     )
                     ReaderViewModel.Dialog.ReadingMode -> ReadingModeSheet(
