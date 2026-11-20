@@ -50,7 +50,7 @@ class SuwayomiApi(private val gql: GraphQLClient) {
         val data = gql.execute(
             """
             query Manga(${'$'}id: Int!) {
-              manga(id: ${'$'}id) { ...M }
+              manga(id: ${'$'}id) { ...M initialized }
               chapters(condition: {mangaId: ${'$'}id}, order: [{by: SOURCE_ORDER, byType: DESC}]) { nodes { ...C } }
             }
             $MANGA_FRAGMENT
@@ -59,6 +59,7 @@ class SuwayomiApi(private val gql: GraphQLClient) {
             vars { put("id", mangaId) },
         )
         return MangaDetails(
+            initialized = data.obj("manga").bool("initialized"),
             manga = data.obj("manga").toManga(),
             chapters = data.obj("chapters").arr("nodes").map { it.jsonObject.toChapter() },
             fetchedAt = System.currentTimeMillis(),

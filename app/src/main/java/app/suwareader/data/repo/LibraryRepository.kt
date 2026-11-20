@@ -90,13 +90,12 @@ class LibraryRepository(
                 // Manga gone from the server library lose their cached details and downloads.
                 val keep = progressSync.pending.value.values.map { it.mangaId }.toSet()
                 downloads.reconcileLibrary(ids, keep)
-                details.keys.filter { it !in ids && it !in keep }.forEach { id ->
-                    details.remove(id)
-                    store.delete(detailsFile(id))
-                }
+                // Drop the disk cache of manga that left the library, except ones open in this session (a manga
+                // page or Browse result being looked at must keep working). Screens hold on to the in-memory
+                // flows, so those are never removed.
                 store.file("manga").listFiles()?.forEach { f ->
                     val id = f.nameWithoutExtension.toLongOrNull()
-                    if (id != null && id !in ids && id !in keep) f.delete()
+                    if (id != null && id !in ids && id !in keep && id !in details.keys) f.delete()
                 }
             }
         } finally {
@@ -104,8 +103,16 @@ class LibraryRepository(
         }
     }
 
-    suspend fun refreshDetails(mangaId: Long): Result<MangaDetails> = online { api.mangaDetails(mangaId) }
-        .onSuccess { d -> storeDetails(d) }
+    suspend fun refreshDetails(mangaId: Long): Result<MangaDetails> = online {
+        val d = api.mangaDetails(mangaId)
+        // Manga found through Browse aren't fetched by the server until someone asks: do it now
+        if (!d.initialized || d.chapters.isEmpty()) {
+            api.refreshFromSource(mangaId)
+            api.mangaDetails(mangaId)
+        } else {
+            d
+        }
+    }.onSuccess { d -> storeDetails(d) }
 
     private fun storeDetails(d: MangaDetails) {
         store.write(detailsFile(d.manga.id), MangaDetails.serializer(), d)

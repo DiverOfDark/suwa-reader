@@ -104,7 +104,7 @@ fun MangaScreen(mangaId: Long, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
-    val details by c.repository.detailsFlow(mangaId).collectAsState()
+    val details by remember(mangaId) { c.repository.detailsFlow(mangaId) }.collectAsState()
     val library by c.repository.library.collectAsState()
     val connection by c.repository.connection.collectAsState()
     val downloaded by c.downloads.downloaded.collectAsState()

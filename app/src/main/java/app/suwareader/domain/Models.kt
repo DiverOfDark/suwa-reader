@@ -68,6 +68,7 @@ data class MangaDetails(
     val manga: Manga,
     val chapters: List<Chapter>,
     val fetchedAt: Long = 0,
+    val initialized: Boolean = true,
 )
 
 /** A chapter with the manga it belongs to, as listed by updates and history. */
