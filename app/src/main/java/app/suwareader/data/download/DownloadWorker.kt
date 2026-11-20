@@ -13,6 +13,8 @@ import app.suwareader.SuwaApp
 import app.suwareader.util.Notifications
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -46,34 +48,24 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         } catch (e: Exception) {
             logcat(LogPriority.WARN) { "Couldn't start downloads in the foreground: ${e.message}" }
         }
-        val parallel = container.prefs.parallelDownloads.get().coerceIn(1, MAX_PARALLEL)
         val failures = AtomicInteger(0)
         val serverGone = AtomicBoolean(false)
         coroutineScope {
-            repeat(parallel) {
-                launch {
-                    while (!isStopped && !serverGone.get()) {
-                        val item = downloads.claimNext() ?: break
-                        val id = item.chapter.id
-                        try {
-                            download(item)
-                            downloads.finishItem(id)
-                            failures.set(0)
-                        } catch (e: CancellationException) {
-                            downloads.updateItem(id) { it.copy(state = QueuedDownload.State.QUEUED) }
-                            downloads.persistQueue()
-                            throw e
-                        } catch (e: Exception) {
-                            logcat(LogPriority.WARN) { "Download of ${item.mangaTitle} / ${item.chapter.name} failed: ${e.asLog()}" }
-                            downloads.updateItem(id) { it.copy(state = QueuedDownload.State.ERROR, error = e.message ?: e.javaClass.simpleName) }
-                            downloads.persistQueue()
-                            // Several connection failures in a row: the server is probably gone. Stop and let
-                            // WorkManager try again on the next network change.
-                            if (e is IOException && failures.incrementAndGet() >= 3) serverGone.set(true)
-                        }
-                        updateNotification()
+            val running = mutableListOf<Job>()
+            // Re-reads the parallelism setting as it goes: raising it starts more chapters at once, lowering it lets
+            // the ones in flight finish and starts no new ones until fewer than the new limit are running.
+            while (!isStopped && !serverGone.get()) {
+                running.removeAll { !it.isActive }
+                val limit = container.prefs.parallelDownloads.get().coerceIn(1, MAX_PARALLEL)
+                if (running.size < limit) {
+                    val item = downloads.claimNext()
+                    if (item != null) {
+                        running += launch { process(item, failures, serverGone) }
+                        continue
                     }
+                    if (running.isEmpty()) break
                 }
+                delay(300)
             }
         }
         if (serverGone.get()) {
@@ -138,6 +130,28 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 sizeBytes = size,
             ),
         )
+    }
+
+    private suspend fun process(item: QueuedDownload, failures: AtomicInteger, serverGone: AtomicBoolean) {
+        val id = item.chapter.id
+        try {
+            download(item)
+            downloads.finishItem(id)
+            failures.set(0)
+        } catch (e: CancellationException) {
+            downloads.updateItem(id) { it.copy(state = QueuedDownload.State.QUEUED) }
+            downloads.persistQueue()
+            throw e
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN) { "Download of ${item.mangaTitle} / ${item.chapter.name} failed: ${e.asLog()}" }
+            downloads.updateItem(id) { it.copy(state = QueuedDownload.State.ERROR, error = e.message ?: e.javaClass.simpleName) }
+            downloads.persistQueue()
+            // Several connection failures in a row: the server is probably gone. Stop and let WorkManager try
+            // again on the next network change.
+            if (e is IOException && failures.incrementAndGet() >= 3) serverGone.set(true)
+        }
+        lastNotified = 0
+        updateNotification()
     }
 
     @Volatile private var lastNotified = 0L
