@@ -1,0 +1,21 @@
+[book]
+title = "Suwa"
+description = "A native Android reader for your Suwayomi server"
+authors = ["Kirill Orlov"]
+language = "en"
+src = "docs"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+site-url = "/suwa-reader/"
+git-repository-url = "https://github.com/DiverOfDark/suwa-reader"
+edit-url-template = "https://github.com/DiverOfDark/suwa-reader/edit/main/{path}"
+additional-css = ["docs/theme/suwa.css"]
+
+[output.html.search]
+enable = true

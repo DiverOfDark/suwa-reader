@@ -1,5 +1,7 @@
 # Suwa
 
+**[Website and docs](https://diverofdark.github.io/suwa-reader/)** · **[Download](https://github.com/DiverOfDark/suwa-reader/releases/latest)**
+
 A native Android reader for a [Suwayomi](https://github.com/Suwayomi/Suwayomi-Server) server, where the server is the
 single source of truth. Library, categories, chapters, read progress and per-series reader settings all come from the
 server; the phone keeps a cache plus downloaded chapters so it works offline.
