@@ -98,6 +98,10 @@ fun SettingsScreen(onBack: () -> Unit) {
             SwitchRow("Pure black in dark mode", c.prefs.pureBlack)
             HorizontalDivider(Modifier.padding(vertical = 12.dp))
 
+            Section("App updates")
+            UpdateSection()
+            HorizontalDivider(Modifier.padding(vertical = 12.dp))
+
             Section("Storage")
             Row(
                 Modifier.fillMaxWidth().clickable {

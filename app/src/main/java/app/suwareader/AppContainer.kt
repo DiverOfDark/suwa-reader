@@ -63,6 +63,8 @@ class AppContainer(context: Context) {
         repository.readerSettingsSync = it
     }
 
+    val updates = app.suwareader.update.Updates(context, prefs)
+
     val readerCacheDir = File(context.cacheDir, "reader")
 
     /** Checks a server address and login without saving them. Returns the server's name and version. */

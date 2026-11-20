@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -41,6 +42,7 @@ fun MoreScreen(onOpenDownloads: () -> Unit, onOpenSettings: () -> Unit) {
     val queue by c.downloads.queue.collectAsState()
     val server by c.prefs.serverUrl.collectAsState()
     val lastError by c.progressSync.lastError.collectAsState()
+    val update by c.updates.state.collectAsState()
 
     Scaffold(topBar = { TopAppBar(title = { Text("More") }) }) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -56,6 +58,9 @@ fun MoreScreen(onOpenDownloads: () -> Unit, onOpenSettings: () -> Unit) {
                     "${pending.size} reading updates waiting for the server",
                     lastError?.let { "Last try: $it · tap to retry" } ?: "Tap to send now",
                 ) { scope.launch { c.progressSync.flush() } }
+            }
+            (update as? app.suwareader.update.UpdateState.Available)?.let {
+                Entry(Icons.Filled.SystemUpdate, "Suwa ${it.versionName} is available", "Tap to see it in Settings", onOpenSettings)
             }
             Entry(Icons.Filled.Download, "Downloads", if (queue.isEmpty()) "Queue empty" else "${queue.size} in queue", onOpenDownloads)
             Entry(Icons.Filled.Settings, "Settings", "Server, downloads, appearance", onOpenSettings)

@@ -15,12 +15,17 @@ import app.suwareader.ui.MainActivity
 object Notifications {
     const val CHANNEL_DOWNLOADS = "downloads"
     const val ID_DOWNLOAD = 100
+    const val CHANNEL_UPDATES = "updates"
+    const val ID_UPDATE = 101
 
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_DOWNLOADS, "Downloads", NotificationManager.IMPORTANCE_LOW),
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_UPDATES, "App updates", NotificationManager.IMPORTANCE_DEFAULT),
         )
     }
 

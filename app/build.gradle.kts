@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -14,8 +16,27 @@ android {
         applicationId = "app.suwareader"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.1.2"
+        // CI passes the commit time as versionCode so every release is newer than the last
+        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (project.findProperty("versionName") as String?) ?: "dev"
+    }
+
+    // Release key: from the environment in CI, or keystore.properties locally. Without it, release builds fall back
+    // to the debug key (fine for local testing, but such a build can't update a GitHub-installed copy).
+    val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->
+        Properties().apply { f.inputStream().use { load(it) } }
+    }
+    val keystorePath = System.getenv("KEYSTORE_FILE") ?: keystoreProps?.getProperty("storeFile")
+    val keystorePassword = System.getenv("KEYSTORE_PASSWORD") ?: keystoreProps?.getProperty("storePassword")
+    signingConfigs {
+        if (keystorePath != null && keystorePassword != null) {
+            create("release") {
+                storeFile = rootProject.file(keystorePath)
+                storePassword = keystorePassword
+                keyAlias = "suwa"
+                keyPassword = keystorePassword
+            }
+        }
     }
 
     buildTypes {
@@ -25,7 +46,7 @@ android {
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

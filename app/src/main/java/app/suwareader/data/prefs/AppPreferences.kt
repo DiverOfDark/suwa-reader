@@ -32,6 +32,8 @@ class AppPreferences(store: PreferenceStore) {
     val deleteAfterReading = store.getBoolean("download_delete_after_read", false)
     val autoDownloadAhead = store.getInt("download_ahead", 0) // chapters to keep downloaded ahead while reading
 
+    val autoInstallUpdates = store.getBoolean("updates_auto_install", true)
+
     val readerDefaultLoadAhead = store.getBoolean("reader_preload_next", true)
 
     enum class ThemeMode { SYSTEM, LIGHT, DARK }
