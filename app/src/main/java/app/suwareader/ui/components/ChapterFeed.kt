@@ -57,6 +57,7 @@ fun ChapterFeed(
     groupKey: (ChapterWithManga) -> Long,
     subtitle: (ChapterWithManga) -> String,
     load: suspend (offset: Int) -> Pair<List<ChapterWithManga>, Boolean>,
+    onePerManga: Boolean = false,
     onOpenManga: (Long) -> Unit,
 ) {
     val c = container()
@@ -96,7 +97,7 @@ fun ChapterFeed(
     LaunchedEffect(Unit) { loadPage(reset = true) }
 
     val listState = rememberLazyListState()
-    val nearEnd by remember { derivedStateOf { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 > items.size - 10 } }
+    val nearEnd by remember { derivedStateOf { (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) > listState.layoutInfo.totalItemsCount - 8 } }
     LaunchedEffect(nearEnd, hasMore) { if (nearEnd && hasMore && items.isNotEmpty()) loadPage(reset = false) }
 
     val queued = remember(queue) { queue.associateBy { it.chapter.id } }
@@ -121,7 +122,7 @@ fun ChapterFeed(
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                 (connection as? Connection.Offline)?.let { item { OfflineBanner(it.reason) } }
                 var lastGroup = ""
-                val rows = items.toList()
+                val rows = if (onePerManga) items.distinctBy { it.mangaId } else items.toList()
                 rows.forEachIndexed { index, entry ->
                     val group = formatDate(groupKey(entry))
                     if (group != lastGroup) {

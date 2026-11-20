@@ -26,7 +26,7 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".ui.reader.ReaderActivity"
+            android:name="eu.kanade.tachiyomi.ui.reader.ReaderActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
             android:exported="false"
             android:theme="@style/Theme.Suwa.Reader" />

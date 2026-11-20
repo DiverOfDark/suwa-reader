@@ -31,12 +31,12 @@ private val LightScheme = lightColorScheme(
 )
 
 @Composable
-fun SuwaTheme(forceDark: Boolean = false, content: @Composable () -> Unit) {
+fun SuwaTheme(forceDark: Boolean = false, forceLight: Boolean = false, content: @Composable () -> Unit) {
     val context = LocalContext.current
     val prefs = (context.applicationContext as SuwaApp).container.prefs
     val mode by prefs.themeMode.collectAsState()
     val pureBlack by prefs.pureBlack.collectAsState()
-    val dark = forceDark || when (mode) {
+    val dark = !forceLight && forceDark || !forceLight && when (mode) {
         AppPreferences.ThemeMode.SYSTEM -> isSystemInDarkTheme()
         AppPreferences.ThemeMode.DARK -> true
         AppPreferences.ThemeMode.LIGHT -> false

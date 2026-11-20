@@ -15,5 +15,6 @@ fun HistoryScreen(onOpenManga: (Long) -> Unit) {
         subtitle = { e -> if (e.chapter.isRead) "Finished" else "Page ${e.chapter.lastPageRead + 1}" },
         load = { offset -> c.api.history(offset, 50) },
         onOpenManga = onOpenManga,
+        onePerManga = true,
     )
 }

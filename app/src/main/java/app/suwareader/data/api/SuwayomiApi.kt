@@ -159,6 +159,19 @@ class SuwayomiApi(private val gql: GraphQLClient) {
         )
     }
 
+    suspend fun setMangaMeta(mangaId: Long, key: String, value: String) {
+        gql.execute(
+            """
+            mutation(${'$'}id: Int!, ${'$'}k: String!, ${'$'}v: String!) { setMangaMeta(input: {meta: {mangaId: ${'$'}id, key: ${'$'}k, value: ${'$'}v}}) { meta { key } } }
+            """.trimIndent(),
+            vars {
+                put("id", mangaId)
+                put("k", key)
+                put("v", value)
+            },
+        )
+    }
+
     /** Starts the server's library update (fetches new chapters from every source). */
     suspend fun startLibraryUpdate() {
         gql.execute("mutation { updateLibrary(input: {}) { updateStatus { jobsInfo { isRunning } } } }")
@@ -297,6 +310,7 @@ class SuwayomiApi(private val gql: GraphQLClient) {
             latestUploadedAt = objOrNull("latestUploadedChapter")?.long("uploadDate") ?: 0,
             chapterCount = objOrNull("chapters")?.int("totalCount") ?: 0,
             categoryIds = objOrNull("categories")?.arr("nodes")?.map { it.jsonObject.int("id") }.orEmpty(),
+            meta = arr("meta").associate { val o = it.jsonObject; o.str("key").orEmpty() to o.str("value").orEmpty() },
         )
     }
 
@@ -327,6 +341,7 @@ class SuwayomiApi(private val gql: GraphQLClient) {
               id title thumbnailUrl thumbnailUrlLastFetched author artist description genre status realUrl sourceId
               source { displayName }
               categories { nodes { id } }
+              meta { key value }
               user { inLibrary inLibraryAt unreadCount downloadCount bookmarkCount lastReadChapter { id user { lastReadAt } } }
               latestFetchedChapter { fetchedAt }
               latestUploadedChapter { uploadDate }

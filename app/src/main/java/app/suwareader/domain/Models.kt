@@ -26,6 +26,7 @@ data class Manga(
     val latestUploadedAt: Long = 0,
     val chapterCount: Int = 0,
     val categoryIds: List<Int> = emptyList(),
+    val meta: Map<String, String> = emptyMap(),
 )
 
 @Serializable

@@ -38,6 +38,8 @@ fun BrowseScreen(onOpenSource: (String, String) -> Unit) {
     var sources by remember { mutableStateOf<List<Source>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    var allLanguages by remember { mutableStateOf(false) }
+    val preferred = remember { setOf("en", "all", Locale.getDefault().language) }
 
     suspend fun load() {
         refreshing = true
@@ -51,7 +53,18 @@ fun BrowseScreen(onOpenSource: (String, String) -> Unit) {
     }
     LaunchedEffect(Unit) { load() }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Browse sources") }) }) { padding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Browse sources") },
+                actions = {
+                    androidx.compose.material3.TextButton(onClick = { allLanguages = !allLanguages }) {
+                        Text(if (allLanguages) "My languages" else "All languages")
+                    }
+                },
+            )
+        },
+    ) { padding ->
         PullToRefreshBox(refreshing, onRefresh = { scope.launch { load() } }, modifier = Modifier.padding(padding).fillMaxSize()) {
             val list = sources
             when {
@@ -59,7 +72,9 @@ fun BrowseScreen(onOpenSource: (String, String) -> Unit) {
                 list == null -> {}
                 list.isEmpty() -> EmptyState("No sources installed", "Install extensions in the Suwayomi web UI.")
                 else -> LazyColumn(Modifier.fillMaxSize()) {
-                    list.groupBy { it.lang }.forEach { (lang, group) ->
+                    list.filter { allLanguages || it.lang in preferred }
+                        .sortedBy { if (it.lang in preferred) 0 else 1 }
+                        .groupBy { it.lang }.forEach { (lang, group) ->
                         item(key = "lang-$lang") {
                             Text(
                                 languageName(lang),

@@ -102,6 +102,8 @@ class ReaderViewModel(
 
     private fun setDetails(details: MangaDetails) {
         val m = details.manga
+        // A change made on this phone that the server hasn't confirmed yet wins over the server's copy
+        val localNewer = mangaPrefs.getLong("ts_${m.id}", 0) > details.fetchedAt
         appManga = m
         appChapters = details.chapters.associateBy { it.id }
         chapterList = details.chapters
@@ -113,8 +115,8 @@ class ReaderViewModel(
                     id = m.id,
                     title = m.title,
                     source = m.sourceId?.toLongOrNull(),
-                    readingMode = mangaPrefs.getInt("mode_${m.id}", 0),
-                    orientation = mangaPrefs.getInt("orientation_${m.id}", 0),
+                    readingMode = m.meta[META_MODE]?.toIntOrNull()?.takeUnless { localNewer } ?: mangaPrefs.getInt("mode_${m.id}", 0),
+                    orientation = m.meta[META_ORIENTATION]?.toIntOrNull()?.takeUnless { localNewer } ?: mangaPrefs.getInt("orientation_${m.id}", 0),
                 ),
             )
         }
@@ -276,6 +278,8 @@ class ReaderViewModel(
 
         val isLast = readerChapter.pages?.lastIndex == index
         val wasRead = readerChapter.chapter.read
+        // Nothing changed (e.g. the first page of the next chapter peeking in): don't touch the server
+        if (!isLast && index == readerChapter.chapter.lastPageRead) return
         readerChapter.update { it.copy(lastPageRead = index, read = it.read || isLast) }
         val manga = appManga ?: return
         val chapter = appChapters[readerChapter.chapter.id] ?: return
@@ -328,6 +332,7 @@ class ReaderViewModel(
     fun setMangaReadingMode(mode: ReadingMode) {
         val m = state.value.manga ?: return
         mangaPrefs.edit().putInt("mode_${m.id}", mode.flagValue).apply()
+        saveMeta(m.id, META_MODE, mode.flagValue)
         mutableState.update { it.copy(manga = m.copy(readingMode = mode.flagValue)) }
         // Re-set chapters on the new viewer
         viewModelScope.launch {
@@ -346,10 +351,20 @@ class ReaderViewModel(
     fun setMangaOrientationType(orientation: ReaderOrientation) {
         val m = state.value.manga ?: return
         mangaPrefs.edit().putInt("orientation_${m.id}", orientation.flagValue).apply()
+        saveMeta(m.id, META_ORIENTATION, orientation.flagValue)
         mutableState.update { it.copy(manga = m.copy(orientation = orientation.flagValue)) }
         eventChannel.trySend(Event.SetOrientation(getMangaOrientation()))
     }
     // endregion
+
+    /** Per-series reader settings live on the server too, so every device opens a series the same way. */
+    private fun saveMeta(mangaId: Long, key: String, value: Int) {
+        mangaPrefs.edit().putLong("ts_$mangaId", System.currentTimeMillis()).apply()
+        container.appScope.launch {
+            repository.online { container.api.setMangaMeta(mangaId, key, value.toString()) }
+                .onSuccess { repository.refreshDetails(mangaId) }
+        }
+    }
 
     fun showMenus(visible: Boolean) {
         mutableState.update { it.copy(menuVisible = visible) }
@@ -384,6 +399,11 @@ class ReaderViewModel(
     ) {
         val currentChapter: ReaderChapter? get() = viewerChapters?.currChapter
         val totalPages: Int get() = currentChapter?.pages?.size ?: -1
+    }
+
+    companion object {
+        const val META_MODE = "suwa_readingMode"
+        const val META_ORIENTATION = "suwa_orientation"
     }
 
     sealed interface Dialog {
