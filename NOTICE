@@ -1,0 +1,6 @@
+Suwa — a Suwayomi client for Android.
+
+The reader (app/src/main/java/eu/kanade/**, tachiyomi/**, and the shims beside them) is adapted from
+Mihon (https://github.com/mihonapp/mihon), Copyright the Mihon and Tachiyomi open source projects,
+licensed under the Apache License 2.0. Changes: decoupled from Mihon's DI, sources and downloads, WebGPU
+viewer removed, pages loaded from a Suwayomi server.
