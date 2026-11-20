@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -25,9 +26,14 @@ import logcat.logcat
 import okhttp3.Request
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+
+    companion object {
+        const val MAX_PARALLEL = 5
+    }
 
     private val container = (context.applicationContext as SuwaApp).container
     private val downloads = container.downloads
@@ -40,30 +46,39 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         } catch (e: Exception) {
             logcat(LogPriority.WARN) { "Couldn't start downloads in the foreground: ${e.message}" }
         }
-        var failures = 0
-        while (!isStopped) {
-            val item = downloads.nextQueued() ?: break
-            val id = item.chapter.id
-            downloads.updateItem(id) { it.copy(state = QueuedDownload.State.DOWNLOADING, error = null, pagesDone = 0) }
-            try {
-                download(item)
-                downloads.finishItem(id)
-                failures = 0
-            } catch (e: CancellationException) {
-                downloads.updateItem(id) { it.copy(state = QueuedDownload.State.QUEUED) }
-                downloads.persistQueue()
-                throw e
-            } catch (e: Exception) {
-                logcat(LogPriority.WARN) { "Download of ${item.mangaTitle} / ${item.chapter.name} failed: ${e.asLog()}" }
-                downloads.updateItem(id) { it.copy(state = QueuedDownload.State.ERROR, error = e.message ?: e.javaClass.simpleName) }
-                downloads.persistQueue()
-                failures++
-                // The server is probably gone: stop and let WorkManager try again on the next network change.
-                if (failures >= 3 && e is IOException) {
-                    downloads.retryFailedLater()
-                    return Result.retry()
+        val parallel = container.prefs.parallelDownloads.get().coerceIn(1, MAX_PARALLEL)
+        val failures = AtomicInteger(0)
+        val serverGone = AtomicBoolean(false)
+        coroutineScope {
+            repeat(parallel) {
+                launch {
+                    while (!isStopped && !serverGone.get()) {
+                        val item = downloads.claimNext() ?: break
+                        val id = item.chapter.id
+                        try {
+                            download(item)
+                            downloads.finishItem(id)
+                            failures.set(0)
+                        } catch (e: CancellationException) {
+                            downloads.updateItem(id) { it.copy(state = QueuedDownload.State.QUEUED) }
+                            downloads.persistQueue()
+                            throw e
+                        } catch (e: Exception) {
+                            logcat(LogPriority.WARN) { "Download of ${item.mangaTitle} / ${item.chapter.name} failed: ${e.asLog()}" }
+                            downloads.updateItem(id) { it.copy(state = QueuedDownload.State.ERROR, error = e.message ?: e.javaClass.simpleName) }
+                            downloads.persistQueue()
+                            // Several connection failures in a row: the server is probably gone. Stop and let
+                            // WorkManager try again on the next network change.
+                            if (e is IOException && failures.incrementAndGet() >= 3) serverGone.set(true)
+                        }
+                        updateNotification()
+                    }
                 }
             }
+        }
+        if (serverGone.get()) {
+            downloads.retryFailedLater()
+            return Result.retry()
         }
         Notifications.cancel(applicationContext, Notifications.ID_DOWNLOAD)
         return Result.success()
@@ -76,7 +91,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val dir = downloads.chapterDir(item.mangaId, item.chapter.id).apply { mkdirs() }
         val done = AtomicInteger(dir.listFiles()?.count { it.isFile && !it.name.endsWith(".tmp") } ?: 0)
         downloads.updateItem(item.chapter.id) { it.copy(pagesTotal = pages.size, pagesDone = done.get()) }
-        setProgressNotification(item, done.get(), pages.size)
+        updateNotification()
         val semaphore = Semaphore(3)
         val client = container.httpClient
         coroutineScope {
@@ -104,7 +119,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                         }
                         val n = done.incrementAndGet()
                         downloads.updateItem(item.chapter.id) { it.copy(pagesDone = n) }
-                        setProgressNotification(item, n, pages.size)
+                        updateNotification()
                     }
                 }
             }.awaitAll()
@@ -125,10 +140,24 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         )
     }
 
-    private suspend fun setProgressNotification(item: QueuedDownload, done: Int, total: Int) {
-        val remaining = downloads.queue.value.size
-        val title = if (remaining > 1) "Downloading · $remaining left" else "Downloading"
-        val n = notification("$title\n${item.mangaTitle} · ${item.chapter.name}", done, total)
+    @Volatile private var lastNotified = 0L
+
+    /** One notification for all running chapters: progress is the pages done across them. */
+    private suspend fun updateNotification() {
+        val now = System.currentTimeMillis()
+        if (now - lastNotified < 500) return
+        lastNotified = now
+        val queue = downloads.queue.value
+        val running = queue.filter { it.state == QueuedDownload.State.DOWNLOADING }
+        if (running.isEmpty()) return
+        val waiting = queue.count { it.state == QueuedDownload.State.QUEUED }
+        val title = buildString {
+            append("Downloading ")
+            append(if (running.size == 1) "1 chapter" else "${running.size} chapters")
+            if (waiting > 0) append(" · $waiting waiting")
+        }
+        val text = running.joinToString(", ") { "${it.mangaTitle} ${it.chapter.name}" }
+        val n = notification("$title\n$text", running.sumOf { it.pagesDone }, running.sumOf { it.pagesTotal })
         try {
             setForeground(foregroundInfo(n))
         } catch (e: Exception) {

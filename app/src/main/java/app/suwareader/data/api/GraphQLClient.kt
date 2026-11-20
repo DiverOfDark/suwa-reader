@@ -50,7 +50,10 @@ class GraphQLClient(
             val errors = root["errors"]
             if (errors != null && errors != JsonNull) {
                 val message = errors.jsonArray.joinToString("; ") {
-                    it.jsonObject["message"]?.jsonPrimitive?.content?.substringBefore("\n")?.take(300) ?: "error"
+                    it.jsonObject["message"]?.jsonPrimitive?.content?.substringBefore("\n")
+                        // "Exception while fetching data (/fetchChapterPages) : <the actual problem>"
+                        ?.replace(Regex("^Exception while fetching data \\([^)]*\\) : "), "")
+                        ?.trim()?.take(300) ?: "error"
                 }
                 val data = root["data"]
                 if (data == null || data == JsonNull || data.jsonObject.values.all { it == JsonNull }) {

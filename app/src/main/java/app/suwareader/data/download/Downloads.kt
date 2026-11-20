@@ -140,6 +140,12 @@ class Downloads(
 
     fun clearQueue() = cancel(_queue.value.map { it.chapter.id })
 
+    fun retry(chapterId: Long) {
+        _queue.update { q -> q.map { if (it.chapter.id == chapterId && it.state == QueuedDownload.State.ERROR) it.copy(state = QueuedDownload.State.QUEUED, error = null) else it } }
+        persistQueue()
+        start()
+    }
+
     fun retryFailed() {
         _queue.update { q -> q.map { if (it.state == QueuedDownload.State.ERROR) it.copy(state = QueuedDownload.State.QUEUED, error = null) else it } }
         persistQueue()
@@ -208,7 +214,15 @@ class Downloads(
     }
 
     // region worker API
-    internal fun nextQueued(): QueuedDownload? = if (_paused.value) null else _queue.value.firstOrNull { it.state == QueuedDownload.State.QUEUED }
+    /** Takes the next queued chapter and marks it downloading, so parallel workers never pick the same one. */
+    @Synchronized
+    internal fun claimNext(): QueuedDownload? {
+        if (_paused.value) return null
+        val next = _queue.value.firstOrNull { it.state == QueuedDownload.State.QUEUED } ?: return null
+        val claimed = next.copy(state = QueuedDownload.State.DOWNLOADING, error = null, pagesDone = 0)
+        _queue.update { q -> q.map { if (it.chapter.id == next.chapter.id) claimed else it } }
+        return claimed
+    }
 
     internal fun updateItem(chapterId: Long, transform: (QueuedDownload) -> QueuedDownload) {
         _queue.update { q -> q.map { if (it.chapter.id == chapterId) transform(it) else it } }

@@ -66,6 +66,11 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             Section("Downloads")
             SwitchRow("Only download on Wi-Fi", c.prefs.downloadOnlyOnWifi)
+            Choice(
+                "Chapters downloaded at the same time",
+                c.prefs.parallelDownloads,
+                (1..app.suwareader.data.download.DownloadWorker.MAX_PARALLEL).map { it to it.toString() },
+            )
             SwitchRow("Delete chapters after reading them", c.prefs.deleteAfterReading)
             Choice(
                 "While reading a downloaded chapter, download the next",

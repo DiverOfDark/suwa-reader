@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -99,7 +100,14 @@ fun DownloadsScreen(onBack: () -> Unit, onOpenManga: (Long) -> Unit) {
                 } else {
                     if (paused) Text("Paused", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
                     LazyColumn(Modifier.fillMaxSize()) {
-                        items(queue, key = { it.chapter.id }) { item -> QueueRow(item, onTop = { c.downloads.move(item.chapter.id, true) }, onCancel = { c.downloads.cancel(listOf(item.chapter.id)) }) }
+                        items(queue, key = { it.chapter.id }) { item ->
+                            QueueRow(
+                                item,
+                                onRetry = { c.downloads.retry(item.chapter.id) },
+                                onTop = { c.downloads.move(item.chapter.id, true) },
+                                onCancel = { c.downloads.cancel(listOf(item.chapter.id)) },
+                            )
+                        }
                     }
                 }
             } else {
@@ -143,21 +151,30 @@ fun DownloadsScreen(onBack: () -> Unit, onOpenManga: (Long) -> Unit) {
 }
 
 @Composable
-private fun QueueRow(item: QueuedDownload, onTop: () -> Unit, onCancel: () -> Unit) {
+private fun QueueRow(item: QueuedDownload, onRetry: () -> Unit, onTop: () -> Unit, onCancel: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(item.mangaTitle, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(item.chapter.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             when (item.state) {
-                QueuedDownload.State.DOWNLOADING -> LinearProgressIndicator(
-                    progress = { if (item.pagesTotal > 0) item.pagesDone.toFloat() / item.pagesTotal else 0f },
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                )
+                QueuedDownload.State.DOWNLOADING -> if (item.pagesTotal > 0) {
+                    LinearProgressIndicator(
+                        progress = { item.pagesDone.toFloat() / item.pagesTotal },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
+                } else {
+                    // Still asking the server for the page list
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+                }
                 QueuedDownload.State.ERROR -> Text(item.error ?: "Failed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, maxLines = 2)
                 QueuedDownload.State.QUEUED -> {}
             }
         }
-        IconButton(onClick = onTop) { Icon(Icons.Filled.VerticalAlignTop, "Move to top") }
+        if (item.state == QueuedDownload.State.ERROR) {
+            IconButton(onClick = onRetry) { Icon(Icons.Filled.Refresh, "Retry", tint = MaterialTheme.colorScheme.primary) }
+        } else {
+            IconButton(onClick = onTop) { Icon(Icons.Filled.VerticalAlignTop, "Move to top") }
+        }
         IconButton(onClick = onCancel) { Icon(Icons.Filled.Close, "Cancel") }
     }
 }

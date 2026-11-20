@@ -29,6 +29,7 @@ class AppPreferences(store: PreferenceStore) {
     val chapterHideRead = store.getBoolean("chapter_hide_read", false)
 
     val downloadOnlyOnWifi = store.getBoolean("download_only_wifi", false)
+    val parallelDownloads = store.getInt("download_parallel", 2)
     val deleteAfterReading = store.getBoolean("download_delete_after_read", false)
     val autoDownloadAhead = store.getInt("download_ahead", 0) // chapters to keep downloaded ahead while reading
 
